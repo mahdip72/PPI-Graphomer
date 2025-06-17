@@ -242,7 +242,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--pdb_folder", '-p',
-                        default="./data/pdb/default", type=str,
+                        default="/home/mpngf/datasets/pinder_db/2024-02/heterodimer_pdb/train_pdbs", type=str,
                         help="Path to the folder containing PDB files")
     parser.add_argument("--device", '--d', default="cuda", type=str,
                         help="Device to run the models on (e.g., 'cuda', 'cpu')")
@@ -252,8 +252,8 @@ if __name__ == '__main__':
     # parser.add_argument("--mixed_precision", '--mp', action='store_true', default=True, help="Enable mixed precision for inference (CUDA only)") # Old line
     parser.add_argument("--mixed-precision", "--mp", default=True, action=argparse.BooleanOptionalAction,
                         help="Enable mixed precision for inference (CUDA only, default: enabled)")
-    parser.add_argument("--batch_size", "-bs", default=2, type=int, help="Batch size for DataLoader")
-    parser.add_argument("--num_workers", "-nw", default=1, type=int, help="Number of worker processes for DataLoader")
+    parser.add_argument("--batch_size", "-bs", default=16, type=int, help="Batch size for DataLoader")
+    parser.add_argument("--num_workers", "-nw", default=6, type=int, help="Number of worker processes for DataLoader")
     parser.add_argument("--csv_dir", default="./result/train/", type=str,
                         help="Directory to save the prediction CSV file (default: ./result/default/)")
 
