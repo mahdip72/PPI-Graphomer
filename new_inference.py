@@ -217,8 +217,8 @@ def evaluate(model, loader, device, model_esmif, alphabet_if, pro_len,
                                     protein_names_val, chain_id_res_val)
             end = time.time()
             # print each sample's prediction
-            for name, out in zip(protein_names_val, val_outputs.view(-1)):
-                print(f"Sample {name} predicted affinity: {out.item()} (Time taken: {end - start:.4f} seconds)")
+            # for name, out in zip(protein_names_val, val_outputs.view(-1)):
+            #     print(f"Sample {name} predicted affinity: {out.item()} (Time taken: {end - start:.4f} seconds)")
             output_list.append(val_outputs.view(-1))
             protein_names_val_list.extend(protein_names_val)
 
@@ -263,56 +263,31 @@ if __name__ == '__main__':
     batch_size_arg = args.batch_size
     csv_dir_arg = args.csv_dir
 
-    # Determine the main device based on the argument and availability
-    if selected_device == "cuda" and not torch.cuda.is_available():
-        print("CUDA selected, but not available. Falling back to CPU.")
-        device_main = torch.device("cpu")
-    else:
-        device_main = torch.device(selected_device)
+    # Determine devices for transformer, ESM, and ESM-IF
+    device_transformer = torch.device('cuda:0')
+    device_esm = torch.device('cuda:0')
+    device_esmif = torch.device('cuda:0')
 
-    print(f"Using device: {device_main}")
+    print(f"Using transformer device: {device_transformer}")
+    print(f"Using ESM device: {device_esm}")
     print(f"Searching for PDB files in: {pdb_folder_path}")
 
     # Load models and data once
     print("Loading ESM2 model...")
     model_esm, alphabet = esm_fair.pretrained.esm2_t33_650M_UR50D()
-    model_esm = model_esm.eval()
-    # if hasattr(torch, 'compile'):
-    #     print("Compiling ESM2 model with torch.compile()...")
-    #     model_esm = torch.compile(model_esm)
+    model_esm = model_esm.eval().to(device_esm)
 
     print("Loading ESM-IF1 model...")
     model_esmif, alphabet_if = esm_fair.pretrained.esm_if1_gvp4_t16_142M_UR50()
-    # Move model_esmif to device_main
-    model_esmif = model_esmif.eval()
-    # if hasattr(torch, 'compile'):
-    #     print("Compiling ESM-IF1 model with torch.compile()...")
-    #     model_esmif = torch.compile(model_esmif)
+    model_esmif = model_esmif.eval().to(device_esmif)
 
     print("Loading Transformer model...")
-    transformer_model = torch.load(TRANSFORMER_MODEL_PATH, map_location=device_main)
-    transformer_model = transformer_model.eval()
-    # if hasattr(torch, 'compile'):
-    #     print("Compiling Transformer model with torch.compile()...")
-    #     transformer_model = torch.compile(transformer_model)
+    transformer_model = torch.load(TRANSFORMER_MODEL_PATH, map_location=device_transformer)
+    transformer_model = transformer_model.eval().to(device_transformer)
 
     print("Loading HETATM list...")
     hetatm_list_global = np.load(HETATM_LIST_PATH, allow_pickle=True)
     print("Models and data loaded.")
-
-    # Define the specific device for ESM models as cuda:1
-    device_esm_models = torch.device("cuda:1")
-
-    # Move models to their designated devices
-    # Ensure transformer_model is on device_main (e.g., cuda:0)
-    transformer_model = transformer_model.to(device_main)
-    # Move ESM models to cuda:1
-    model_esm = model_esm.to(device_esm_models)
-    model_esmif = model_esmif.to(device_main)
-
-    print(f"Transformer model placed on: {next(transformer_model.parameters()).device}")
-    print(f"ESM model placed on: {next(model_esm.parameters()).device}")
-    print(f"ESM-IF model placed on: {next(model_esmif.parameters()).device}")
 
     if os.path.exists(affinity_file_path):
         # Assuming CSV format: PDB_ID,Affinity_Value (or similar)
@@ -332,12 +307,12 @@ if __name__ == '__main__':
     pro_len_const = 2000
     # Pass only esm and raw params; inverse folding model used in evaluate
     # Pass device_esm_models (cuda:1) to MyDataSet as model_esm resides on this device
-    dataset = MyDataSet(pdb_files, model_esm, alphabet, pro_len_const, device_esm_models, hetatm_list_global, affinity_dict,
+    dataset = MyDataSet(pdb_files, model_esm, alphabet, pro_len_const, device_esm, hetatm_list_global, affinity_dict,
                         use_mixed_precision_arg)  # Pass mixed precision flag
     val_loader = Data.DataLoader(dataset, batch_size=batch_size_arg, shuffle=False, collate_fn=collate_fn,
                                  num_workers=1)  # Use batch_size_arg
     # device_main (e.g., cuda:0) is used for transformer_model within the evaluate function
-    valid_loss, output_all = evaluate(transformer_model, val_loader, device_main, model_esmif, alphabet_if,
+    valid_loss, output_all = evaluate(transformer_model, val_loader, device_transformer, model_esmif, alphabet_if,
                                       pro_len_const, use_mixed_precision_arg)  # Pass mixed precision flag
 
     # Ensure the CSV directory exists
@@ -353,3 +328,6 @@ if __name__ == '__main__':
             filename_without_ext = os.path.splitext(os.path.basename(pdb_path))[0]
             csv_writer.writerow([filename_without_ext, aff.item()])
             # print(f"Predicted affinity for {filename_without_ext}.pdb: {aff.item()}") # Keep print statement if
+
+    print(f"Inference completed. Predictions saved to {csv_file_path}")
+    exit(0)
