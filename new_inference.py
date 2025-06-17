@@ -288,12 +288,12 @@ if __name__ == '__main__':
     # Increase cache size and compile with full graph and dynamic shape support to avoid recompilation warnings
 
     dynamo.config.cache_size_limit = 32768
-    model_esm = torch.compile(model_esm, dynamic=True, fullgraph=True)
+    model_esm = torch.compile(model_esm)
 
     print("Loading ESM-IF1 model...")
     model_esmif, alphabet_if = esm_fair.pretrained.esm_if1_gvp4_t16_142M_UR50()
     model_esmif = model_esmif.eval().to(device_esmif)
-    model_esmif = torch.compile(model_esmif, dynamic=True, fullgraph=True)
+    model_esmif = torch.compile(model_esmif)
 
     print("Loading Transformer model...")
     transformer_model = torch.load(TRANSFORMER_MODEL_PATH, map_location=device_transformer)
