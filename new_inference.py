@@ -253,6 +253,7 @@ if __name__ == '__main__':
     parser.add_argument("--mixed-precision", "--mp", default=True, action=argparse.BooleanOptionalAction,
                         help="Enable mixed precision for inference (CUDA only, default: enabled)")
     parser.add_argument("--batch_size", "-bs", default=2, type=int, help="Batch size for DataLoader")
+    parser.add_argument("--num_workers", "-nw", default=1, type=int, help="Number of worker processes for DataLoader")
     parser.add_argument("--csv_dir", default="./result/train/", type=str,
                         help="Directory to save the prediction CSV file (default: ./result/default/)")
 
@@ -263,6 +264,7 @@ if __name__ == '__main__':
     affinity_file_path = args.affinity_file
     use_mixed_precision_arg = args.mixed_precision
     batch_size_arg = args.batch_size
+    num_workers_arg = args.num_workers
     csv_dir_arg = args.csv_dir
 
     # Determine devices for transformer, ESM, and ESM-IF
@@ -281,6 +283,9 @@ if __name__ == '__main__':
     print("Loading ESM2 model...")
     model_esm, alphabet = esm_fair.pretrained.esm2_t33_650M_UR50D()
     model_esm = model_esm.eval().to(device_esm)
+
+    # compile the model for faster inference
+    model_esm = torch.compile(model_esm)
 
     print("Loading ESM-IF1 model...")
     model_esmif, alphabet_if = esm_fair.pretrained.esm_if1_gvp4_t16_142M_UR50()
@@ -314,7 +319,7 @@ if __name__ == '__main__':
     dataset = MyDataSet(pdb_files, model_esm, alphabet, pro_len_const, device_esm, device_data,
                         hetatm_list_global, affinity_dict, use_mixed_precision_arg)
     val_loader = Data.DataLoader(dataset, batch_size=batch_size_arg, shuffle=False, collate_fn=collate_fn,
-                                 num_workers=2)
+                                 num_workers=num_workers_arg)
 
     valid_loss, output_all = evaluate(transformer_model, val_loader, device_transformer, model_esmif, alphabet_if,
                                       pro_len_const, use_mixed_precision_arg)
