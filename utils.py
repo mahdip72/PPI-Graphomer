@@ -16,7 +16,7 @@ HETATM_RADIUS = 7.0  # Å cutoff for HETATM neighbor features
 # Constants moved or redefined for utility functions
 STANDARD_RES = [
     "GLY", 'G', "ALA", 'A', "VAL", 'V', "LEU", 'L', "ILE", 'I', "PRO", 'P',
-    "PHE", 'F', "TYR", 'Y', "TRW", 'W', "SER", 'S', "THR", 'T', "CYS", 'C',
+    "PHE", 'F', "TYR", 'Y', "TRP", 'W', "SER", 'S', "THR", 'T', "CYS", 'C',
     "MET", 'M', "ASN", 'N', "GLN", 'Q', "ASP", 'D', "GLU", 'E', "LYS", 'K',
     "ARG", 'R', "HIS", 'H'
 ]

@@ -5,16 +5,12 @@ import torch
 import torch.multiprocessing as mp  # Add this import
 import tqdm  # Add this import
 import torch.cuda.amp as amp  # Add for mixed precision
-
-# Device for GPU distance computations
-DIST_DEVICE = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
-# DIST_DEVICE = 'cpu'
 from esm import inverse_folding
 import torch.nn.functional as F
 import torch.utils.data as Data
 import argparse
 import warnings
-import csv  # Add for CSV output
+import csv
 
 import time
 
@@ -60,7 +56,7 @@ class MyDataSet(Data.Dataset):
                                                   self.use_mixed_precision)
         torch.cuda.empty_cache()
 
-        cpu_data = util_extract_protein_cpu_data(pdb_path, self.hetatm_list, DIST_DEVICE, self.affinity_data_dict)
+        cpu_data = util_extract_protein_cpu_data(pdb_path, self.hetatm_list, self.device, self.affinity_data_dict)
 
         protein_name_key = cpu_data["protein_name"]
         esm_data_val_list = esm_data_full.get(protein_name_key)
@@ -221,8 +217,8 @@ def evaluate(model, loader, device, model_esmif, alphabet_if, pro_len,
                                     protein_names_val, chain_id_res_val)
             end = time.time()
             # print each sample's prediction
-            # for name, out in zip(protein_names_val, val_outputs.view(-1)):
-            #     print(f"Sample {name} predicted affinity: {out.item()} (Time taken: {end - start:.4f} seconds)")
+            for name, out in zip(protein_names_val, val_outputs.view(-1)):
+                print(f"Sample {name} predicted affinity: {out.item()} (Time taken: {end - start:.4f} seconds)")
             output_list.append(val_outputs.view(-1))
             protein_names_val_list.extend(protein_names_val)
 
@@ -244,7 +240,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--pdb_folder", '-p',
-                        default="/home/mpngf/datasets/pinder_db/2024-02/heterodimer_pdb/train_pdbs/", type=str,
+                        default="./data/pdb/default", type=str,
                         help="Path to the folder containing PDB files")
     parser.add_argument("--device", '--d', default="cuda", type=str,
                         help="Device to run the models on (e.g., 'cuda', 'cpu')")
@@ -254,7 +250,7 @@ if __name__ == '__main__':
     # parser.add_argument("--mixed_precision", '--mp', action='store_true', default=True, help="Enable mixed precision for inference (CUDA only)") # Old line
     parser.add_argument("--mixed-precision", "--mp", default=True, action=argparse.BooleanOptionalAction,
                         help="Enable mixed precision for inference (CUDA only, default: enabled)")
-    parser.add_argument("--batch_size", "-bs", default=32, type=int, help="Batch size for DataLoader")
+    parser.add_argument("--batch_size", "-bs", default=2, type=int, help="Batch size for DataLoader")
     parser.add_argument("--csv_dir", default="./result/train/", type=str,
                         help="Directory to save the prediction CSV file (default: ./result/default/)")
 
@@ -280,24 +276,26 @@ if __name__ == '__main__':
     # Load models and data once
     print("Loading ESM2 model...")
     model_esm, alphabet = esm_fair.pretrained.esm2_t33_650M_UR50D()
-    model_esm = model_esm.eval().to(DIST_DEVICE)
+    model_esm = model_esm.eval()
     # if hasattr(torch, 'compile'):
     #     print("Compiling ESM2 model with torch.compile()...")
     #     model_esm = torch.compile(model_esm)
+
     print("Loading ESM-IF1 model...")
     model_esmif, alphabet_if = esm_fair.pretrained.esm_if1_gvp4_t16_142M_UR50()
     # Move model_esmif to device_main
-    model_esmif = model_esmif.eval().to(DIST_DEVICE)
+    model_esmif = model_esmif.eval()
     # if hasattr(torch, 'compile'):
     #     print("Compiling ESM-IF1 model with torch.compile()...")
     #     model_esmif = torch.compile(model_esmif)
-    # Old line: model_esmif = model_esmif.eval().to(torch.device('cpu'))
+
     print("Loading Transformer model...")
     transformer_model = torch.load(TRANSFORMER_MODEL_PATH, map_location=device_main)
     transformer_model = transformer_model.eval()
     # if hasattr(torch, 'compile'):
     #     print("Compiling Transformer model with torch.compile()...")
     #     transformer_model = torch.compile(transformer_model)
+
     print("Loading HETATM list...")
     hetatm_list_global = np.load(HETATM_LIST_PATH, allow_pickle=True)
     print("Models and data loaded.")
