@@ -33,13 +33,14 @@ affinity_dict = {}  # Keep this as it's used by util_extract_protein_cpu_data
 
 
 class MyDataSet(Data.Dataset):
-    def __init__(self, pdb_path_list, model_esm, alphabet, pro_len, device, hetatm_list, affinity_data_dict,
-                 use_mixed_precision):  # Added use_mixed_precision
+    def __init__(self, pdb_path_list, model_esm, alphabet, pro_len, device_esm, device_data, hetatm_list, affinity_data_dict,
+                 use_mixed_precision):  # Added separate device for ESM and non-ESM
         super(MyDataSet, self).__init__()
         self.pdb_path_list = pdb_path_list
         self.model_esm = model_esm
         self.alphabet = alphabet
-        self.device = device
+        self.device_esm = device_esm  # Device for ESM model
+        self.device_data = device_data  # Device for non-ESM features
         self.pro_len = pro_len
         self.hetatm_list = hetatm_list  # Store for util_extract_protein_cpu_data and util_process_train_data
         self.affinity_data_dict = affinity_data_dict  # Store for util_extract_protein_cpu_data
@@ -52,11 +53,11 @@ class MyDataSet(Data.Dataset):
         pdb_path = self.pdb_path_list[idx]
 
         # Pass use_mixed_precision to util_extract_protein_data
-        esm_data_full = util_extract_protein_data(pdb_path, self.model_esm, self.alphabet, self.device,
+        esm_data_full = util_extract_protein_data(pdb_path, self.model_esm, self.alphabet, self.device_esm,
                                                   self.use_mixed_precision)
         torch.cuda.empty_cache()
 
-        cpu_data = util_extract_protein_cpu_data(pdb_path, self.hetatm_list, self.device, self.affinity_data_dict)
+        cpu_data = util_extract_protein_cpu_data(pdb_path, self.hetatm_list, self.device_data, self.affinity_data_dict)
 
         protein_name_key = cpu_data["protein_name"]
         esm_data_val_list = esm_data_full.get(protein_name_key)
@@ -73,9 +74,10 @@ class MyDataSet(Data.Dataset):
                 esm_data_val_list = [[], {}, [], [], torch.empty(0, 0, dtype=torch.long),
                                      torch.empty(0, dtype=torch.bool), []]
 
+        # Pass separate devices: device_esm for ESM features, device_data for other tensors
         val_data_dict = util_process_train_data(cpu_data, esm_data_val_list, pro_len=self.pro_len,
                                                 hetatm_list_len=len(self.hetatm_list),
-                                                device=self.device)  # Pass self.device
+                                                device_esm=self.device_esm, device_data=self.device_data)
 
         # Return processed data and raw coordinate info for inverse folding
         return (
@@ -267,9 +269,12 @@ if __name__ == '__main__':
     device_transformer = torch.device('cuda:0')
     device_esm = torch.device('cuda:0')
     device_esmif = torch.device('cuda:0')
+    device_data = torch.device('cpu')
 
     print(f"Using transformer device: {device_transformer}")
     print(f"Using ESM device: {device_esm}")
+    print(f"Using ESM-IF device: {device_esmif}")
+    print(f"Using data device: {device_data}")
     print(f"Searching for PDB files in: {pdb_folder_path}")
 
     # Load models and data once
@@ -305,15 +310,14 @@ if __name__ == '__main__':
     pdb_files = [os.path.join(pdb_folder_path, f) for f in os.listdir(pdb_folder_path) if f.endswith(".pdb")]
     print(f"Found {len(pdb_files)} PDB files. Running batch inference...")
     pro_len_const = 2000
-    # Pass only esm and raw params; inverse folding model used in evaluate
-    # Pass device_esm_models (cuda:1) to MyDataSet as model_esm resides on this device
-    dataset = MyDataSet(pdb_files, model_esm, alphabet, pro_len_const, device_esm, hetatm_list_global, affinity_dict,
-                        use_mixed_precision_arg)  # Pass mixed precision flag
+
+    dataset = MyDataSet(pdb_files, model_esm, alphabet, pro_len_const, device_esm, device_data,
+                        hetatm_list_global, affinity_dict, use_mixed_precision_arg)
     val_loader = Data.DataLoader(dataset, batch_size=batch_size_arg, shuffle=False, collate_fn=collate_fn,
-                                 num_workers=1)  # Use batch_size_arg
-    # device_main (e.g., cuda:0) is used for transformer_model within the evaluate function
+                                 num_workers=2)
+
     valid_loss, output_all = evaluate(transformer_model, val_loader, device_transformer, model_esmif, alphabet_if,
-                                      pro_len_const, use_mixed_precision_arg)  # Pass mixed precision flag
+                                      pro_len_const, use_mixed_precision_arg)
 
     # Ensure the CSV directory exists
     if not os.path.exists(csv_dir_arg):

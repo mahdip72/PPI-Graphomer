@@ -779,7 +779,7 @@ def util_extract_protein_cpu_data(pdb_file, hetatm_list_global_arg, dist_device_
     return protein_data
 
 
-def util_process_train_data(cpu_data, esm_data_val_list, pro_len, hetatm_list_len, device):  # Added device argument
+def util_process_train_data(cpu_data, esm_data_val_list, pro_len, hetatm_list_len, device_esm, device_data):  # Separate devices for ESM and other data
     protein_name_key = cpu_data["protein_name"]
 
     seq_concat = "".join(cpu_data["sequence"])
@@ -794,10 +794,11 @@ def util_process_train_data(cpu_data, esm_data_val_list, pro_len, hetatm_list_le
 
     current_len_tokens = enc_tokens_cat.shape[0]
     # Assuming 0 is the padding token ID, adjust if different
-    padded_enc_tokens = torch.zeros((pro_len,), dtype=torch.int16)
+    # ESM tokens on device_esm
+    padded_enc_tokens = torch.zeros((pro_len,), dtype=torch.int16, device=device_esm)
     if current_len_tokens > 0:
         copy_len = min(current_len_tokens, pro_len)
-        padded_enc_tokens[:copy_len] = enc_tokens_cat[:copy_len]
+        padded_enc_tokens[:copy_len] = enc_tokens_cat[:copy_len].to(device_esm)
 
     # ESM Feature Processing
     esm_dim_fallback = 1280  # Default ESM2 dimension
@@ -810,7 +811,7 @@ def util_process_train_data(cpu_data, esm_data_val_list, pro_len, hetatm_list_le
                 seq_feat_cat = seq_feat_cat[:original_len, :]
             # else: it will be padded to original_len or pro_len later
     else:
-        seq_feat_cat = torch.empty(0, esm_dim_fallback, dtype=torch.float32, device=device)  # Use passed device
+        seq_feat_cat = torch.empty(0, esm_dim_fallback, dtype=torch.float32, device=device_data)
 
     h_seq_feat, w_seq_feat = seq_feat_cat.shape if seq_feat_cat.ndim == 2 else (0, 0)
     actual_esm_dim = w_seq_feat if w_seq_feat > 0 else esm_dim_fallback
@@ -818,7 +819,8 @@ def util_process_train_data(cpu_data, esm_data_val_list, pro_len, hetatm_list_le
     # Option 3: Ensure padded_seq_features is on the same device as seq_feat_cat
     # If seq_feat_cat is empty, its device is CPU and dtype is float32 by its earlier construction.
     # If seq_feat_cat is not empty, it inherits device from esm_data_val_list[0] (token_representations_list).
-    padded_seq_features = torch.zeros((pro_len, actual_esm_dim), dtype=seq_feat_cat.dtype, device=seq_feat_cat.device)
+    # ESM features on device_esm
+    padded_seq_features = torch.zeros((pro_len, actual_esm_dim), dtype=seq_feat_cat.dtype, device=device_esm)
 
     if h_seq_feat > 0:
         copy_h = min(h_seq_feat, pro_len)
@@ -828,7 +830,7 @@ def util_process_train_data(cpu_data, esm_data_val_list, pro_len, hetatm_list_le
     chain_ids_for_esmif = esm_data_val_list[2]
 
     # Interface Residue Matrix (Optimized)
-    interface_res_matrix = torch.ones((pro_len, pro_len), dtype=torch.bool)
+    interface_res_matrix = torch.ones((pro_len, pro_len), dtype=torch.bool, device=device_data)
     row_indices = []
     col_indices = []
     for i, interacting_js in enumerate(cpu_data["interface_res"]):
@@ -847,7 +849,7 @@ def util_process_train_data(cpu_data, esm_data_val_list, pro_len, hetatm_list_le
     # Interaction Type Matrix (Optimized Padding)
     if_type_raw = torch.tensor(cpu_data["interaction_type_matrix"], dtype=torch.int16)
     h_raw, w_raw = if_type_raw.shape if if_type_raw.ndim == 2 else (0, 0)
-    padded_if_type = torch.zeros((pro_len, pro_len), dtype=torch.int16)
+    padded_if_type = torch.zeros((pro_len, pro_len), dtype=torch.int16, device=device_data)
     if h_raw > 0 and w_raw > 0:
         copy_h = min(h_raw, pro_len)
         copy_w = min(w_raw, pro_len)
@@ -857,7 +859,7 @@ def util_process_train_data(cpu_data, esm_data_val_list, pro_len, hetatm_list_le
     if_matrix_raw = torch.tensor(cpu_data["interaction_matrix"], dtype=torch.int16)
     h_raw, w_raw, d_raw = if_matrix_raw.shape if if_matrix_raw.ndim == 3 else (0, 0, 0)
     d_fixed = d_raw if d_raw > 0 else 6  # Assuming depth 6 if input is empty or malformed
-    padded_if_matrix = torch.zeros((pro_len, pro_len, d_fixed), dtype=torch.int16)
+    padded_if_matrix = torch.zeros((pro_len, pro_len, d_fixed), dtype=torch.int16, device=device_data)
     if h_raw > 0 and w_raw > 0 and d_raw > 0:
         copy_h = min(h_raw, pro_len)
         copy_w = min(w_raw, pro_len)
@@ -867,7 +869,7 @@ def util_process_train_data(cpu_data, esm_data_val_list, pro_len, hetatm_list_le
     mass_centor_raw = torch.tensor(cpu_data["res_mass_centor"], dtype=torch.float16)  # Assuming float16 from cpu_data
     h_raw, w_raw = mass_centor_raw.shape if mass_centor_raw.ndim == 2 else (0, 0)
     w_fixed_mass = w_raw if w_raw > 0 else 3  # Assuming 3D coordinates
-    padded_mass_centor = torch.zeros((pro_len, w_fixed_mass), dtype=torch.float16)
+    padded_mass_centor = torch.zeros((pro_len, w_fixed_mass), dtype=torch.float16, device=device_data)
     if h_raw > 0 and w_raw > 0:
         copy_h = min(h_raw, pro_len)
         padded_mass_centor[:copy_h, :] = mass_centor_raw[:copy_h, :]
@@ -882,7 +884,7 @@ def util_process_train_data(cpu_data, esm_data_val_list, pro_len, hetatm_list_le
 
     h_raw, w_raw = hetatm_features_stacked.shape if hetatm_features_stacked.ndim == 2 else (0, 0)
     actual_hetatm_dim = w_raw if w_raw > 0 else hetatm_list_len
-    padded_hetatm_features = torch.zeros((pro_len, actual_hetatm_dim), dtype=torch.float32)
+    padded_hetatm_features = torch.zeros((pro_len, actual_hetatm_dim), dtype=torch.float32, device=device_data)
     if h_raw > 0:
         copy_h = min(h_raw, pro_len)
         padded_hetatm_features[:copy_h, :] = hetatm_features_stacked[:copy_h, :]
