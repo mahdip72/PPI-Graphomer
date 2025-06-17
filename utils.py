@@ -515,9 +515,9 @@ def util_extract_protein_cpu_data(pdb_file, hetatm_list_global_arg, dist_device_
                     elif atom.get_id() == 'CA':
                         ca_coord = atom.get_coord()
                     elif atom.get_id() == 'C':
-                        c_atom = atom.get_coord()
+                        c_coord = atom.get_coord()
 
-                backbone_complete = n_coord is not None and ca_coord is not None and c_atom is not None
+                backbone_complete = n_coord is not None and ca_coord is not None and c_coord is not None
 
                 if is_hoh: continue
 
