@@ -30,11 +30,10 @@ model_esmif = None  # Will be passed to MyDataSet
 alphabet_if = None  # Will be passed to MyDataSet
 transformer_model = None
 hetatm_list_global = None
-affinity_dict = {}  # Keep this as it's used by util_extract_protein_cpu_data
 
 
 class MyDataSet(Data.Dataset):
-    def __init__(self, pdb_path_list, model_esm, alphabet, pro_len, device_esm, device_data, hetatm_list, affinity_data_dict,
+    def __init__(self, pdb_path_list, model_esm, alphabet, pro_len, device_esm, device_data, hetatm_list,
                  use_mixed_precision):  # Added separate device for ESM and non-ESM
         super(MyDataSet, self).__init__()
         self.pdb_path_list = pdb_path_list
@@ -44,7 +43,6 @@ class MyDataSet(Data.Dataset):
         self.device_data = device_data  # Device for non-ESM features
         self.pro_len = pro_len
         self.hetatm_list = hetatm_list  # Store for util_extract_protein_cpu_data and util_process_train_data
-        self.affinity_data_dict = affinity_data_dict  # Store for util_extract_protein_cpu_data
         self.use_mixed_precision = use_mixed_precision  # Store mixed precision flag
 
     def __len__(self):
@@ -58,7 +56,7 @@ class MyDataSet(Data.Dataset):
                                                   self.use_mixed_precision)
         torch.cuda.empty_cache()
 
-        cpu_data = util_extract_protein_cpu_data(pdb_path, self.hetatm_list, self.device_data, self.affinity_data_dict)
+        cpu_data = util_extract_protein_cpu_data(pdb_path, self.hetatm_list, self.device_data)
 
         protein_name_key = cpu_data["protein_name"]
         esm_data_val_list = esm_data_full.get(protein_name_key)
@@ -87,7 +85,6 @@ class MyDataSet(Data.Dataset):
             val_data_dict["enc_tokens"],
             val_data_dict["seq_features"],
             val_data_dict["interface_res_matrix"],
-            val_data_dict["affinity"],
             val_data_dict["seq"],
             val_data_dict["interaction_type_matrix"],
             val_data_dict["interaction_matrix"],
@@ -105,17 +102,16 @@ def collate_fn(batch):
     enc_tokens = torch.stack([item[2] for item in batch])
     seq_features = torch.stack([item[3] for item in batch])
     interface_atoms = torch.stack([item[4] for item in batch])
-    affinity = None
-    seqs = [item[6] for item in batch]
-    interaction_type = torch.stack([item[7] for item in batch])
-    interaction_matrix = torch.stack([item[8] for item in batch])
-    res_mass_centor = torch.stack([item[9] for item in batch])
-    hetatm_features = torch.stack([item[10] for item in batch])
-    coor_dicts = [item[11] for item in batch]
-    chain_ids_list = [item[12] for item in batch]
-    original_lens = [item[13] for item in batch]
+    seqs = [item[5] for item in batch]
+    interaction_type = torch.stack([item[6] for item in batch])
+    interaction_matrix = torch.stack([item[7] for item in batch])
+    res_mass_centor = torch.stack([item[8] for item in batch])
+    hetatm_features = torch.stack([item[9] for item in batch])
+    coor_dicts = [item[10] for item in batch]
+    chain_ids_list = [item[11] for item in batch]
+    original_lens = [item[12] for item in batch]
     return (protein_names, chain_id_res, enc_tokens, seq_features,
-            interface_atoms, affinity, seqs, interaction_type,
+            interface_atoms, seqs, interaction_type,
             interaction_matrix, res_mass_centor, hetatm_features,
             coor_dicts, chain_ids_list, original_lens)
 
@@ -134,7 +130,7 @@ def evaluate(model, loader, device, model_esmif, alphabet_if, pro_len,
         # Wrap loader with tqdm for a progress bar
         for it, batch in enumerate(tqdm.tqdm(loader, desc="Evaluating")):
             (protein_names_val, chain_id_res_val, enc_tokens_val, seq_features_val,
-             interface_atoms_val, affinity_val, seqs_val,
+             interface_atoms_val, seqs_val,
              interaction_type_val, interaction_matrix_val, res_mass_centor_val,
              hetatm_features_val, coor_dicts_val, chain_ids_list_val, original_lens_val) = batch
             # log time
@@ -247,10 +243,6 @@ if __name__ == '__main__':
                         help="Path to the folder containing PDB files")
     parser.add_argument("--device", '--d', default="cuda", type=str,
                         help="Device to run the models on (e.g., 'cuda', 'cpu')")
-    # Add argument for affinity file path
-    parser.add_argument("--affinity_file", '--af', default="./data/elife-07454-supp4-v4.csv", type=str,
-                        help="Path to the affinity data CSV file")
-    # parser.add_argument("--mixed_precision", '--mp', action='store_true', default=True, help="Enable mixed precision for inference (CUDA only)") # Old line
     parser.add_argument("--mixed-precision", "--mp", default=True, action=argparse.BooleanOptionalAction,
                         help="Enable mixed precision for inference (CUDA only, default: enabled)")
     parser.add_argument("--batch_size", "-bs", default=16, type=int, help="Batch size for DataLoader")
@@ -262,7 +254,6 @@ if __name__ == '__main__':
 
     pdb_folder_path = args.pdb_folder
     selected_device = args.device
-    affinity_file_path = args.affinity_file
     use_mixed_precision_arg = args.mixed_precision
     batch_size_arg = args.batch_size
     num_workers_arg = args.num_workers
@@ -304,25 +295,13 @@ if __name__ == '__main__':
     hetatm_list_global = np.load(HETATM_LIST_PATH, allow_pickle=True)
     print("Models and data loaded.")
 
-    if os.path.exists(affinity_file_path):
-        # Assuming CSV format: PDB_ID,Affinity_Value (or similar)
-        # Adjust parsing based on your CSV structure
-        with open(affinity_file_path, 'r') as f_aff:
-            next(f_aff)  # Skip header if exists
-            for line in f_aff:
-                parts = line.strip().split(',')  # or other delimiter
-                if len(parts) >= 2:  # Expecting at least PDB ID and affinity
-                    pdb_id_from_csv = parts[0].strip()
-                    affinity_val = float(parts[-1].strip())  # Assuming affinity is the last column
-                    affinity_dict[pdb_id_from_csv] = affinity_val
-
     # Batch inference over all PDB files
     pdb_files = [os.path.join(pdb_folder_path, f) for f in os.listdir(pdb_folder_path) if f.endswith(".pdb")]
     print(f"Found {len(pdb_files)} PDB files. Running batch inference...")
     pro_len_const = 2000
 
     dataset = MyDataSet(pdb_files, model_esm, alphabet, pro_len_const, device_esm, device_data,
-                        hetatm_list_global, affinity_dict, use_mixed_precision_arg)
+                        hetatm_list_global, use_mixed_precision_arg)
     val_loader = Data.DataLoader(dataset, batch_size=batch_size_arg, shuffle=False, collate_fn=collate_fn,
                                  num_workers=num_workers_arg)
 

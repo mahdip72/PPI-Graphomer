@@ -462,7 +462,7 @@ def util_extract_protein_data(pdb_file, model_esm, alphabet, device, use_mixed_p
     return protein_data
 
 
-def util_extract_protein_cpu_data(pdb_file, hetatm_list_global_arg, dist_device_arg, affinity_dict_arg={}):
+def util_extract_protein_cpu_data(pdb_file, hetatm_list_global_arg, dist_device_arg):
     parser = _PDB_PARSER
     protein_name_from_file = os.path.basename(pdb_file).rsplit('.', 1)[0]
     structure_id = protein_name_from_file  # Default structure ID to filename
@@ -481,7 +481,7 @@ def util_extract_protein_cpu_data(pdb_file, hetatm_list_global_arg, dist_device_
             "hetatm_features": [], "interface_res": [],
             "interaction_type_matrix": np.array([], dtype=np.int32),
             "interaction_matrix": np.array([], dtype=np.int32),
-            "res_mass_centor": np.array([], dtype=np.float16), "affinity": None
+            "res_mass_centor": np.array([], dtype=np.float16)
         }
 
     # Store info about residues that will form the final sequence
@@ -548,7 +548,7 @@ def util_extract_protein_cpu_data(pdb_file, hetatm_list_global_arg, dist_device_
             "hetatm_features": [], "interface_res": [[] for _ in range(n_final_seq)],
             "interaction_type_matrix": np.zeros((0, 0), dtype=np.int32),
             "interaction_matrix": np.zeros((0, 0, 6), dtype=np.int32),
-            "res_mass_centor": np.zeros((0, 3), dtype=np.float16), "affinity": None
+            "res_mass_centor": np.zeros((0, 3), dtype=np.float16)
         }
 
     final_all_res_chain_ids = [info["chain_id"] for info in valid_sequence_residue_info]
@@ -772,9 +772,7 @@ def util_extract_protein_cpu_data(pdb_file, hetatm_list_global_arg, dist_device_
         "interface_res": final_interface_res_list,
         "interaction_type_matrix": interaction_type_matrix_final,
         "interaction_matrix": interaction_matrix_final,
-        "res_mass_centor": final_res_mass_centers,
-        "affinity": affinity_dict_arg.get(protein_name, affinity_dict_arg.get(protein_name_from_file, None))
-        # Try both names for affinity
+        "res_mass_centor": final_res_mass_centers
     }
     return protein_data
 
@@ -844,8 +842,6 @@ def util_process_train_data(cpu_data, esm_data_val_list, pro_len, hetatm_list_le
         interface_res_matrix[
             torch.tensor(row_indices, dtype=torch.long), torch.tensor(col_indices, dtype=torch.long)] = False
 
-    current_affinity = cpu_data["affinity"]
-
     # Interaction Type Matrix (Optimized Padding)
     if_type_raw = torch.tensor(cpu_data["interaction_type_matrix"], dtype=torch.int16)
     h_raw, w_raw = if_type_raw.shape if if_type_raw.ndim == 2 else (0, 0)
@@ -894,7 +890,7 @@ def util_process_train_data(cpu_data, esm_data_val_list, pro_len, hetatm_list_le
         "enc_tokens": padded_enc_tokens, "seq_features": padded_seq_features,
         "coor_dict_for_esmif": coor_dict_for_esmif, "chain_ids_for_esmif": chain_ids_for_esmif,
         "original_length": original_len, "interface_res_matrix": interface_res_matrix,
-        "affinity": current_affinity, "interaction_type_matrix": padded_if_type,
+        "interaction_type_matrix": padded_if_type,
         "interaction_matrix": padded_if_matrix, "res_mass_centor": padded_mass_centor,
         "hetatm_features": padded_hetatm_features
     }
