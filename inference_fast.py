@@ -125,7 +125,7 @@ def evaluate(model, loader, device, model_esmif, alphabet_if, pro_len,
         affinity_list = []
         protein_names_val_list = []
 
-        device_esmif = next(model_esmif.parameters()).device # Determine device of ESM-IF model
+        device_esmif = next(model_esmif.parameters()).device  # Determine device of ESM-IF model
 
         # Wrap loader with tqdm for a progress bar
         for it, batch in enumerate(tqdm.tqdm(loader, desc="Evaluating")):
@@ -162,7 +162,7 @@ def evaluate(model, loader, device, model_esmif, alphabet_if, pro_len,
                             # item_specific_chain_feats.append(torch.zeros((0, 512), device=device_esmif, dtype=torch.float32))
 
                 if item_specific_chain_feats:
-                    item_coor_features_concatenated = torch.cat(item_specific_chain_feats, dim=0) # on device_esmif
+                    item_coor_features_concatenated = torch.cat(item_specific_chain_feats, dim=0)  # on device_esmif
                 else:
                     # Create on device_esmif
                     item_coor_features_concatenated = torch.empty((0, 512), device=device_esmif, dtype=torch.float32)
@@ -238,16 +238,15 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--pdb_folder", '-p',
-                        default="/home/mpngf/datasets/pinder_db/2024-02/heterodimer_pdb/train_pdbs", type=str,
+    parser.add_argument("--pdb_folder", '-p', type=str,
                         help="Path to the folder containing PDB files")
     parser.add_argument("--device", '--d', default="cuda", type=str,
                         help="Device to run the models on (e.g., 'cuda', 'cpu')")
     parser.add_argument("--mixed-precision", "--mp", default=True, action=argparse.BooleanOptionalAction,
                         help="Enable mixed precision for inference (CUDA only, default: enabled)")
-    parser.add_argument("--batch_size", "-bs", default=16, type=int, help="Batch size for DataLoader")
-    parser.add_argument("--num_workers", "-nw", default=6, type=int, help="Number of worker processes for DataLoader")
-    parser.add_argument("--csv_dir", default="./result/train/", type=str,
+    parser.add_argument("--batch_size", "-bs", default=8, type=int, help="Batch size for DataLoader")
+    parser.add_argument("--num_workers", "-nw", default=4, type=int, help="Number of worker processes for DataLoader")
+    parser.add_argument("--csv_dir", default="./result/default/", type=str,
                         help="Directory to save the prediction CSV file (default: ./result/default/)")
 
     args = parser.parse_args()
@@ -260,9 +259,9 @@ if __name__ == '__main__':
     csv_dir_arg = args.csv_dir
 
     # Determine devices for transformer, ESM, and ESM-IF
-    device_transformer = torch.device('cuda:0')
-    device_esm = torch.device('cuda:0')
-    device_esmif = torch.device('cuda:0')
+    device_transformer = torch.device(selected_device)
+    device_esm = torch.device(selected_device)
+    device_esmif = torch.device(selected_device)
     device_data = torch.device('cpu')
 
     print(f"Using transformer device: {device_transformer}")
