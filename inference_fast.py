@@ -11,10 +11,7 @@ import torch.utils.data as Data
 import argparse
 import warnings
 import csv
-
 import time
-import torch._dynamo as dynamo  # Add import to tweak dynamo settings
-
 from utils import util_extract_protein_data, util_extract_protein_cpu_data, util_process_train_data
 
 warnings.filterwarnings("ignore")
@@ -246,6 +243,8 @@ if __name__ == '__main__':
                         help="Enable mixed precision for inference (CUDA only, default: enabled)")
     parser.add_argument("--batch_size", "-bs", default=8, type=int, help="Batch size for DataLoader")
     parser.add_argument("--num_workers", "-nw", default=4, type=int, help="Number of worker processes for DataLoader")
+    parser.add_argument("--compile", "-c", default=True, action=argparse.BooleanOptionalAction,
+                        help="Enable torch.compile for models (default: enabled)")
     parser.add_argument("--csv_dir", default="./result/default/", type=str,
                         help="Directory to save the prediction CSV file (default: ./result/default/)")
 
@@ -254,6 +253,7 @@ if __name__ == '__main__':
     pdb_folder_path = args.pdb_folder
     selected_device = args.device
     use_mixed_precision_arg = args.mixed_precision
+    use_compile_arg = args.compile  # Control torch.compile calls
     batch_size_arg = args.batch_size
     num_workers_arg = args.num_workers
     csv_dir_arg = args.csv_dir
@@ -275,20 +275,26 @@ if __name__ == '__main__':
     model_esm, alphabet = esm_fair.pretrained.esm2_t33_650M_UR50D()
     model_esm = model_esm.eval().to(device_esm)
 
-    # Increase cache size and compile with full graph and dynamic shape support to avoid recompilation warnings
-
-    dynamo.config.cache_size_limit = 32768
-    model_esm = torch.compile(model_esm)
+    if use_compile_arg:
+        print("Compiling ESM model...")
+        model_esm = torch.compile(model_esm)
 
     print("Loading ESM-IF1 model...")
     model_esmif, alphabet_if = esm_fair.pretrained.esm_if1_gvp4_t16_142M_UR50()
     model_esmif = model_esmif.eval().to(device_esmif)
-    model_esmif = torch.compile(model_esmif)
+    if use_compile_arg:
+        print("Compiling ESM-IF model...")
+        model_esmif = torch.compile(model_esmif)
 
     print("Loading Transformer model...")
     transformer_model = torch.load(TRANSFORMER_MODEL_PATH, map_location=device_transformer)
     transformer_model = transformer_model.eval().to(device_transformer)
-    # transformer_model = torch.compile(transformer_model, dynamic=True, fullgraph=True)
+    if use_compile_arg:
+        print("Compiling Transformer model...")
+        transformer_model = torch.compile(transformer_model)
+
+        # Does not work with torch.compile
+        # transformer_model = torch.compile(transformer_model, dynamic=True, fullgraph=True)
 
     print("Loading HETATM list...")
     hetatm_list_global = np.load(HETATM_LIST_PATH, allow_pickle=True)
