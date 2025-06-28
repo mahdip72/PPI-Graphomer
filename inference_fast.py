@@ -13,6 +13,7 @@ import argparse
 import warnings
 import csv
 import time
+import traceback  # Add for detailed exception tracing
 from utils import util_extract_protein_data, util_extract_protein_cpu_data, util_process_train_data
 
 warnings.filterwarnings("ignore")
@@ -156,8 +157,9 @@ def evaluate(model, loader, device, model_esmif, alphabet_if, pro_len,
                         except Exception as e:
                             print(
                                 f"Error during ESM-IF1 processing for item {protein_names_val[item_idx]}, chain {chain_id}: {e}")
+                            traceback.print_exc()  # Print full stack trace
                             # Optionally append a zero tensor or handle error
-                            # item_specific_chain_feats.append(torch.zeros((0, 512), device=device_esmif, dtype=torch.float32))
+                            item_specific_chain_feats.append(torch.zeros((0, 512), device=device_esmif, dtype=torch.float32))
 
                 if item_specific_chain_feats:
                     item_coor_features_concatenated = torch.cat(item_specific_chain_feats, dim=0)  # on device_esmif
