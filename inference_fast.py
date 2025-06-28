@@ -139,7 +139,7 @@ def evaluate(model, loader, device, model_esmif, alphabet_if, pro_len,
             current_batch_size = len(protein_names_val)  # Actual batch size
 
             for item_idx in range(current_batch_size):
-                current_item_coor_dict = coor_dicts_val[item_idx]
+                current_item_coor_dict = {k: v.to(device_esmif) for k, v in coor_dicts_val[item_idx].items()}
                 current_item_chain_ids = chain_ids_list_val[item_idx]
                 # ESM-IF1 features for the current item
                 item_specific_chain_feats = []
