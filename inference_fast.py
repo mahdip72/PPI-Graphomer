@@ -1,4 +1,5 @@
 import os
+import glob
 import numpy as np
 import esm as esm_fair
 import torch
@@ -301,7 +302,7 @@ if __name__ == '__main__':
     print("Models and data loaded.")
 
     # Batch inference over all PDB files
-    pdb_files = [os.path.join(pdb_folder_path, f) for f in os.listdir(pdb_folder_path) if f.endswith(".pdb")]
+    pdb_files = glob.glob(os.path.join(pdb_folder_path, '**', '*.pdb'), recursive=True)
     print(f"Found {len(pdb_files)} PDB files. Running batch inference...")
     pro_len_const = 2000
 
