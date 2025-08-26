@@ -246,7 +246,7 @@ if __name__ == '__main__':
                         help="Enable mixed precision for inference (CUDA only, default: enabled)")
     parser.add_argument("--batch_size", "-bs", default=8, type=int, help="Batch size for DataLoader")
     parser.add_argument("--num_workers", "-nw", default=4, type=int, help="Number of worker processes for DataLoader")
-    parser.add_argument("--compile", "-c", default=True, action=argparse.BooleanOptionalAction,
+    parser.add_argument("--compile", "-c", default=False, action=argparse.BooleanOptionalAction,
                         help="Enable torch.compile for models (default: enabled)")
     parser.add_argument("--csv_dir", default="./result/default/", type=str,
                         help="Directory to save the prediction CSV file (default: ./result/default/)")
